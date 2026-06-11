@@ -13,10 +13,10 @@ user_states = {}
 def get_keyboard():
     keyboard = ReplyKeyboardMarkup(
         keyboard=[
-            [KeyboardButton(text="📋 Мои привычки")],
-            [KeyboardButton(text="➕ Добавить привычку")],
-            [KeyboardButton(text="✅ Отметить выполнение")],
-            [KeyboardButton(text="📊 Статистика")],
+            [KeyboardButton(text=" Мои привычки")],
+            [KeyboardButton(text=" Добавить привычку")],
+            [KeyboardButton(text=" Отметить выполнение")],
+            [KeyboardButton(text="git Статистика")],
         ],
         resize_keyboard=True
     )
@@ -71,7 +71,7 @@ async def add_habit(message: Message):
         f"✅ Привычка '{name}' добавлена!",
         reply_markup=get_keyboard()
     )
-@dp.message(F.text == "✅ Отметить выполнение")
+@dp.message(F.text == "Отметить выполнение")
 async def mark_habit(message: Message):
     habits = load_habits()
 
