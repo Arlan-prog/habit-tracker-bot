@@ -1,141 +1,144 @@
 import asyncio
-from aiogram import Bot, Dispatcher, F
-from aiogram.filters import Command
-from aiogram.types import Message, ReplyKeyboardMarkup, KeyboardButton
-from storage import load_habits, save_habits
+import os
 from datetime import date
 
-TOKEN = "8579369363:AAH0Nm0IFFvyPF_isniiAI5qx0WGKMW3AQY"
+from aiogram import Bot, Dispatcher, F
+from aiogram.filters import Command
+from aiogram.types import KeyboardButton, Message, ReplyKeyboardMarkup
 
-bot = Bot(token=TOKEN)
+from storage import load_habits, save_habits
+
+
+BUTTON_HABITS = "📋 Мои привычки"
+BUTTON_ADD = "➕ Добавить привычку"
+BUTTON_MARK = "✅ Отметить выполнение"
+BUTTON_STATS = "📊 Статистика"
+
 dp = Dispatcher()
-user_states = {}
-def get_keyboard():
-    keyboard = ReplyKeyboardMarkup(
-        keyboard=[
-            [KeyboardButton(text=" Мои привычки")],
-            [KeyboardButton(text=" Добавить привычку")],
-            [KeyboardButton(text=" Отметить выполнение")],
-            [KeyboardButton(text="git Статистика")],
-        ],
-        resize_keyboard=True
-    )
-    return keyboard
-@dp.message(Command("start"))
-async def cmd_start(message: Message):
-    await message.answer(
-        "👋 Привет я созданный бот через Ардак! Я твой трекер привычек!\n\nВыбери действие:",
-        reply_markup=get_keyboard()
-    )
-@dp.message(F.text == "📋 Мои привычки")
-async def show_habits(message: Message):
-    habits = load_habits()
+user_states: dict[int, str] = {}
 
+
+def get_keyboard() -> ReplyKeyboardMarkup:
+    return ReplyKeyboardMarkup(
+        keyboard=[
+            [KeyboardButton(text=BUTTON_HABITS)],
+            [KeyboardButton(text=BUTTON_ADD)],
+            [KeyboardButton(text=BUTTON_MARK)],
+            [KeyboardButton(text=BUTTON_STATS)],
+        ],
+        resize_keyboard=True,
+    )
+
+
+def waiting_for_name(message: Message) -> bool:
+    return bool(message.from_user and user_states.get(message.from_user.id) == "waiting_name")
+
+
+@dp.message(Command("start"))
+async def cmd_start(message: Message) -> None:
+    await message.answer(
+        "👋 Привет! Я помогу отслеживать привычки. Выбери действие:",
+        reply_markup=get_keyboard(),
+    )
+
+
+@dp.message(F.text == BUTTON_HABITS)
+async def show_habits(message: Message) -> None:
+    habits = load_habits()
     if not habits:
-        await message.answer("📭 Привычек пока нет!\nДобавь первую через кнопку ➕")
+        await message.answer("📭 Привычек пока нет. Добавь первую кнопкой ниже.")
         return
 
-    text = "📋 Твои привычки:\n\n"
-    for i, habit in enumerate(habits, 1):
-        text += f"{i}. {habit['name']} (с {habit['created']})\n"
+    lines = ["📋 Твои привычки:", ""]
+    for index, habit in enumerate(habits, 1):
+        lines.append(f"{index}. {habit['name']} (с {habit['created']})")
+    await message.answer("\n".join(lines))
 
-    await message.answer(text)
 
-
-@dp.message(F.text == "➕ Добавить привычку")
-async def ask_habit_name(message: Message):
+@dp.message(F.text == BUTTON_ADD)
+async def ask_habit_name(message: Message) -> None:
     user_states[message.from_user.id] = "waiting_name"
     await message.answer("✏️ Напиши название привычки:")
 
-@dp.message(F.text.startswith("") )
-async def add_habit(message: Message):
-    user_id = message.from_user.id
 
-    if user_states.get(user_id) != "waiting_name":
+@dp.message(waiting_for_name)
+async def add_habit(message: Message) -> None:
+    user_id = message.from_user.id
+    name = (message.text or "").strip()
+    if not name:
+        await message.answer("Название не должно быть пустым. Попробуй ещё раз.")
         return
 
-    name = message.text
     habits = load_habits()
-
-    habit = {
-        "name": name,
-        "created": str(date.today()),
-        "entries": []
-    }
-
-    habits.append(habit)
+    habits.append({"name": name, "created": str(date.today()), "entries": []})
     save_habits(habits)
-    user_states[user_id] = None
+    user_states.pop(user_id, None)
+    await message.answer(f"✅ Привычка «{name}» добавлена!", reply_markup=get_keyboard())
 
-    await message.answer(
-        f"✅ Привычка '{name}' добавлена!",
-        reply_markup=get_keyboard()
-    )
-@dp.message(F.text == "Отметить выполнение")
-async def mark_habit(message: Message):
+
+@dp.message(F.text == BUTTON_MARK)
+async def mark_habit(message: Message) -> None:
     habits = load_habits()
-
     if not habits:
-        await message.answer("📭 Привычек пока нет!")
+        await message.answer("📭 Привычек пока нет.")
         return
 
     today = str(date.today())
-    text = "📋 Выбери номер привычки:\n\n"
-    for i, habit in enumerate(habits, 1):
+    lines = ["📋 Выбери номер привычки:", ""]
+    for index, habit in enumerate(habits, 1):
         done = "✅" if today in habit["entries"] else "⬜"
-        text += f"{done} {i}. {habit['name']}\n"
-
-    text += "\nНапиши номер:"
+        lines.append(f"{done} {index}. {habit['name']}")
+    lines.extend(["", "Напиши номер:"])
     user_states[message.from_user.id] = "waiting_mark"
-    await message.answer(text)
+    await message.answer("\n".join(lines))
+
 
 @dp.message(F.text.regexp(r"^\d+$"))
-async def process_mark(message: Message):
+async def process_mark(message: Message) -> None:
     user_id = message.from_user.id
-
     if user_states.get(user_id) != "waiting_mark":
         return
 
     habits = load_habits()
-    today = str(date.today())
-
-    try:
-        number = int(message.text)
-        habit = habits[number - 1]
-    except (ValueError, IndexError):
-        await message.answer("❌ Неверный номер!")
+    number = int(message.text)
+    if not 1 <= number <= len(habits):
+        await message.answer("❌ Такого номера нет. Введи номер из списка.")
         return
 
+    habit = habits[number - 1]
+    today = str(date.today())
     if today in habit["entries"]:
-        await message.answer(f"👍 '{habit['name']}' уже отмечена сегодня!")
+        user_states.pop(user_id, None)
+        await message.answer(f"👍 «{habit['name']}» уже отмечена сегодня.")
         return
 
     habit["entries"].append(today)
     save_habits(habits)
-    user_states[user_id] = None
+    user_states.pop(user_id, None)
+    await message.answer(f"🔥 «{habit['name']}» выполнена сегодня!", reply_markup=get_keyboard())
 
-    await message.answer(
-        f"🔥 '{habit['name']}' выполнена сегодня!",
-        reply_markup=get_keyboard()
-    )
-@dp.message(F.text == "📊 Статистика")
-async def show_stats(message: Message):
+
+@dp.message(F.text == BUTTON_STATS)
+async def show_stats(message: Message) -> None:
     habits = load_habits()
-
     if not habits:
-        await message.answer("📭 Привычек пока нет!")
+        await message.answer("📭 Привычек пока нет.")
         return
 
-    text = "📊 Статистика:\n\n"
+    lines = ["📊 Статистика:", ""]
     for habit in habits:
-        total = len(habit["entries"])
-        text += f"🏷 {habit['name']}\n"
-        text += f"   Всего выполнений: {total}\n\n"
+        lines.append(f"🏷 {habit['name']}: {len(habit['entries'])} выполнений")
+    await message.answer("\n".join(lines))
 
-    await message.answer(text)
 
-async def main():
-    await dp.start_polling(bot)
+async def main() -> None:
+    token = os.getenv("BOT_TOKEN")
+    if not token:
+        raise RuntimeError("Не задан BOT_TOKEN. Добавь токен в переменные окружения.")
+
+    async with Bot(token=token) as bot:
+        await dp.start_polling(bot)
+
 
 if __name__ == "__main__":
     asyncio.run(main())
