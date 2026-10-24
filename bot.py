@@ -2,12 +2,15 @@ import asyncio
 import os
 from datetime import date
 
+from dotenv import load_dotenv
+
 from aiogram import Bot, Dispatcher, F
 from aiogram.filters import Command
 from aiogram.types import KeyboardButton, Message, ReplyKeyboardMarkup
 
 from storage import load_habits, save_habits
 
+load_dotenv()
 
 BUTTON_HABITS = "📋 Мои привычки"
 BUTTON_ADD = "➕ Добавить привычку"
@@ -44,7 +47,7 @@ async def cmd_start(message: Message) -> None:
 
 @dp.message(F.text == BUTTON_HABITS)
 async def show_habits(message: Message) -> None:
-    habits = load_habits()
+    habits = load_habits(message.from_user.id)
     if not habits:
         await message.answer("📭 Привычек пока нет. Добавь первую кнопкой ниже.")
         return
@@ -71,7 +74,7 @@ async def add_habit(message: Message) -> None:
 
     habits = load_habits()
     habits.append({"name": name, "created": str(date.today()), "entries": []})
-    save_habits(habits)
+    save_habits(user_id, habits)
     user_states.pop(user_id, None)
     await message.answer(f"✅ Привычка «{name}» добавлена!", reply_markup=get_keyboard())
 
