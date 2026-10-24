@@ -34,7 +34,7 @@ def load_habits(user_id: int | None = None) -> list[dict]:
     return data
 
 
-def save_habits(user_id: int | None, habits: list[dict]) -> None:
+def save_habits(habits: list[dict], user_id: int | None = None) -> None:
     if not isinstance(habits, list) or any(not isinstance(item, dict) for item in habits):
         raise ValueError("habits must be a list of objects")
 
@@ -42,9 +42,7 @@ def save_habits(user_id: int | None, habits: list[dict]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     temporary_name = None
     try:
-        with NamedTemporaryFile(
-            "w", encoding="utf-8", dir=path.parent, delete=False
-        ) as data_file:
+        with NamedTemporaryFile("w", encoding="utf-8", dir=path.parent, delete=False) as data_file:
             json.dump(habits, data_file, indent=2, ensure_ascii=False)
             data_file.write("\n")
             temporary_name = data_file.name
